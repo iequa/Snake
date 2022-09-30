@@ -1,0 +1,186 @@
+#include<conio.h>
+#include<iostream>
+#include<windows.h>
+#include <thread>
+#include "Snake.h"
+#include "SnakeFood.h"
+
+void drawSnake(SNAKE& s, HDC hDC, HPEN hPenBlck, HPEN hPen, HPEN HSpen);
+void drawApple(SnakeFood apple, HDC hDC, HPEN hPenApple);
+void threadDraw(int Score, SNAKE* s1, SnakeFood* apple, int key, int keyCache,
+	HDC hDC, HPEN hPenBlck, HPEN hPen, HPEN HSpen,
+	HPEN hPenApple, HPEN hOldPen, RECT rc);
+
+int main()
+{
+	int indexIter(0);
+	bool varEnd = false;
+	int ScoreCount(0);
+
+	//Код клавиши для стрелок
+	int keyCache(0);
+	//Код клавиши
+	int key(0);
+
+	srand(time(0));
+	HWND hWnd = GetConsoleWindow();
+	// Получаем DC для рисования
+	HDC hDC = GetDC(hWnd);
+
+	// Получаем размер клиентской области окна
+	RECT rc;
+	GetClientRect(hWnd, &rc);
+
+	// Создаем Pen
+	HPEN hPen = CreatePen(PS_SOLID, 1, RGB(0, 255, 0));
+	HPEN HSpen = CreatePen(PS_SOLID, 1, RGB(151, 151, 255));
+	HPEN hPenApple = CreatePen(PS_SOLID, 2, RGB(255, 0, 0));
+	HPEN hPenBlck = CreatePen(PS_SOLID, 1, RGB(12, 12, 12));
+	SNAKE s1;
+	SnakeFood apple;
+
+	//Только десятичные координаты (10,20,100,490...)
+	apple.setX((int)(ceil((rand() % (rc.right / 2) + (rc.left / 2)) * 0.1) * 10));
+	apple.setY((int)(ceil((rand() % (rc.bottom / 2) + (rc.top / 2)) * 0.1) * 10));
+
+	HPEN hOldPen = (HPEN)SelectObject(hDC, hPenBlck);
+	
+	//Выход из цикла - "ESC"
+	while (varEnd != true)
+	{
+		std::thread thrInp(threadDraw, ScoreCount, &s1, &apple, key, keyCache,
+			hDC, hPenBlck, hPen, HSpen,
+			hPenApple, hOldPen, rc);
+		bool someKeyPress = _kbhit();
+		if (someKeyPress)
+		{
+			key = _getch();
+			if (key == 224)//Обработка нажатия стрелки
+				key = _getch();
+		}
+		switch (key)
+		{
+		case 75://Left
+			if (keyCache != 77)
+			{
+				keyCache = key;
+				s1.moveLeft();
+			}
+			else s1.moveRight();
+			break;
+		case 72://top
+			if (keyCache != 80)
+			{
+				keyCache = key;
+				s1.moveTop();
+			}
+			else
+				s1.moveBottom();
+			break;
+		case 77://right
+			if (keyCache != 75)
+			{
+				keyCache = key;
+				s1.moveRight();
+			}
+			else
+				s1.moveLeft();
+			break;
+		case 80://bottom
+			if (keyCache != 72)
+			{
+				keyCache = key;
+				s1.moveBottom();
+			}
+			else
+				s1.moveTop();
+			break;
+		case 27:
+			printf_s("ESC pressed, exit\n");
+			varEnd = true;
+			break;
+		default:
+			break;
+		}
+		thrInp.join();
+			int len = s1.getLen(); // ОТСЮДА В ТРЕД
+			int counter(0);
+			for (int i = 0; i < len - 1; i++)
+			{
+				for (int j = i + 1; j < len - 1; j++)
+				{
+					if (s1.getHeadPosX(i) == s1.getHeadPosX(j) && s1.getHeadPosY(i) == s1.getHeadPosY(j))
+					{
+						counter++;
+					}
+				}
+			}
+				if (counter == 1)
+				{
+					printf_s("Lost, score is %d", ScoreCount);
+					key = 27;
+				}
+		}
+		// Выбираем старый Pen в DC (освобождаем свой Pen из DC)
+		SelectObject(hDC, hOldPen);
+
+		// Удаляем Pen
+		DeleteObject(hPen);
+
+		// Освобождаем DC
+		ReleaseDC(hWnd, hDC);
+	}
+	
+void threadDraw(int Score, SNAKE* s1,SnakeFood* apple, int key,int keyCache,
+	HDC hDC, HPEN hPenBlck, HPEN hPen, HPEN HSpen,
+	HPEN hPenApple, HPEN hOldPen, RECT rc)
+{
+	srand(time(0));
+	Sleep(100);
+	int len = s1->getLen();
+	drawSnake(*s1, hDC, hPenBlck, hPen, HSpen);
+	drawApple(*apple, hDC, hPenApple);
+	//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	if (apple->getX() == s1->getHeadPosX(len - 1) && apple->getY() == s1->getHeadPosY(len - 1))
+	{
+		Score++;
+		s1->upSize(key, keyCache);
+		hOldPen = (HPEN)SelectObject(hDC, hPenBlck);
+		MoveToEx(hDC, apple->getX(), apple->getY(), NULL);
+		LineTo(hDC, apple->getX(), apple->getY());//Отрисовка яблока
+		apple->setX((int)(ceil((rand() % (rc.right / 2) + (rc.left / 2)) * 0.1) * 10));
+		apple->setY((int)(ceil((rand() % (rc.bottom - 200) + (rc.top)) * 0.1) * 10));
+		drawApple(*apple, hDC, hPenApple);
+	}
+}
+
+//Отрисовка и удаление старых частей
+void drawSnake(SNAKE& s, HDC hDC, HPEN hPenBlck, HPEN hPen, HPEN HSpen)
+{
+	// Создаем Pen
+	HPEN hOldPen = (HPEN)SelectObject(hDC, hPen);
+	MoveToEx(hDC, s.getTailPosX(0), s.getTailPosY(0), NULL);
+
+	int len = s.getLen();
+
+	//Отрисовка новой части
+	for (int i = 0; i < len-1; i++)
+	{
+		MoveToEx(hDC, s.getHeadPosX(i), s.getHeadPosY(i), NULL);
+		LineTo(hDC, s.getTailPosX(i), s.getTailPosY(i));//Движение
+	}
+	hOldPen = (HPEN)SelectObject(hDC, HSpen);
+	MoveToEx(hDC, s.getHeadPosX(len-1), s.getHeadPosY(len-1), NULL);
+	LineTo(hDC, s.getTailPosX(len-1), s.getTailPosY(len-1));//Движение
+	//Закрашивание области
+	hOldPen = (HPEN)SelectObject(hDC, hPenBlck);
+	MoveToEx(hDC, s.getHeadPosOldX(0), s.getHeadPosOldY(0), NULL);
+	LineTo(hDC, s.getTailPosOldX(0), s.getTailPosOldY(0));
+}
+
+void drawApple(SnakeFood apple, HDC hDC, HPEN hPenApple)
+{
+	HPEN hOldPen = (HPEN)SelectObject(hDC, hPenApple);
+	MoveToEx(hDC, apple.getX(), apple.getY(), NULL);
+	LineTo(hDC, apple.getX(), apple.getY());
+}
